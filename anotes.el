@@ -260,19 +260,53 @@ currently displayed message, if any."
   (user-error "Not Implemented!")
   )
 
+(defun anotes--display-live-note (live-note)
+  )
+
+(defvar-local anotes--overlays nil)
+(defun anotes--add-margin-property (start end text)
+  (let ((ov (make-overlay start end)))
+    (overlay-put ov 'before-string (propertize (buffer-substring start end) 'display (list (list 'margin 'right-margin) text)))
+    (overlay-put ov 'face '(:underline t))
+    (overlay-put ov 'help-echo text)
+    (push ov anotes--overlays)
+    )
+  )
+
+(defun anotes--remove-overlays ()
+  (setq anotes--overlays nil)
+  (remove-overlays)
+  )
+
 (defun anotes-add-note ()
   "Add a new piece of note, save it to a note file, and display it in current buffer if possible."
   (interactive)
-  (let (live-note)
+  (let (note
+        live-note
+        file-name
+        )
     (cond
-     ((derived-mode-p 'text-mode)
-      )
-     ((derived-mode-p 'prog-mode)
+     ((or (derived-mode-p 'text-mode)
+          (derived-mode-p 'prog-mode)
+          )
+      (setq file-name (anotes--buffer-file-name))
+      (setq live-note (anotes--new-note-in-text-buffer))
+      (setq note (anotes-from-live-note live-note))
       )
      ((eq major-mode 'eww-mode)
+      (if (anotes--local-webpage)
+          (progn
+            (setq file-name (anotes--buffer-file-name))
+            (setq live-note (anotes--new-note-in-text-buffer))
+            )
+        (setq file-name (anotes--remote-webpage-url))
+        (setq live-note (anotes--new-note-in-text-buffer))
+        )
       )
      (t
       ))
     )
   )
 
+
+(provide 'anotes)
