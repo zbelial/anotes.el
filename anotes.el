@@ -261,7 +261,18 @@ currently displayed message, if any."
   )
 
 (defun anotes-add-note ()
-  "Add a new piece of note and save it to a note file."
+  "Add a new piece of note, save it to a note file, and display it in current buffer if possible."
   (interactive)
+  (let (live-note)
+    (cond
+     ((derived-mode-p 'text-mode)
+      )
+     ((derived-mode-p 'prog-mode)
+      )
+     ((eq major-mode 'eww-mode)
+      )
+     (t
+      ))
+    )
   )
 
