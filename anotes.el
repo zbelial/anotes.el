@@ -40,6 +40,8 @@
 (require 'cl-seq)
 (require 'cl-lib)
 
+(require 'anotes-struct)
+
 (declare-function doc-view-current-page "doc-view")
 (declare-function pdf-view-bookmark-make-record "ext:pdf-view")
 (declare-function pdf-view-current-page "ext:pdf-view")
@@ -51,7 +53,12 @@
   :group 'tools)
 
 ;;; Custom
-(defcustom anotes-default-directory user-emacs-directory
+(defcustom anotes-default-local-note-directory user-emacs-directory
+  "The default directory used to store notes."
+  :type  'string
+  :group 'anotes)
+
+(defcustom anotes-default-webpage-note-directory user-emacs-directory
   "The default directory used to store notes."
   :type  'string
   :group 'anotes)
@@ -68,6 +75,11 @@ The notes added to files in the first directory will be saved to the second dire
   :group 'anotes
   :type 'boolean)
 
+(defcustom anotes-right-margin-width 30
+  "The width of right margin to show annotation."
+  :group 'anotes
+  :type 'integer)
+
 (defcustom anotes-recent-topic-count 5
   "The number of topics recently added or visited that should be saved."
   :group 'anotes
@@ -79,8 +91,8 @@ The notes added to files in the first directory will be saved to the second dire
   :type 'boolean)
 
 
-(defconst anotes-default-label "__DEFAULT_LABEL__")
-(defconst anotes-default-anotes-file-name "anotes-data.el")
+(defconst anotes-default-local-label "ANOTE_LOCAL")
+(defconst anotes-default-remote-webpage-label "ANOTE_REMOTE")
 
 ;;; Macros
 (defmacro anotes--with-message-suppression (&rest body)
@@ -95,6 +107,15 @@ currently displayed message, if any."
              (message ,msg)
            (message nil))))))
 
+(defsubst anotes--local-webpage (url)
+  (string-prefix-p "file://" url))
+
+(defsubst anotes--remote-webpage (url)
+  (or (string-prefix-p "http://" url)
+      (string-prefix-p "https://" url)))
+
+(defsubst anotes--anote-file-name (label anote-dir)
+  (concat (f-full anote-dir) label ".anote"))
 
 (defsubst anotes--label-item-contain-filename (filename)
   "Return the `anotes-directory-alist' item which matches filename most."
@@ -118,21 +139,43 @@ currently displayed message, if any."
   (let ((label-item (anotes--label-item-contain-filename filename)))
     (if label-item
         (f-slash (cddr label-item))
-      (f-slash anotes-default-directory))))
+      (f-slash anotes-default-local-note-directory))))
 
 (defsubst anotes--file-label (filename)
   "Return base directory of filename"
   (let ((label-item (anotes--label-item-contain-filename filename)))
     (if label-item
         (car label-item)
-      anotes-default-label)))
+      anotes-default-local-label)))
+
+(defsubst anotes--file-anote-info (filename filetype)
+  "Return base directory of filename"
+  (let (label anote-dir anote-info)
+    (if (eq filetype 'remote-webpage)
+        (progn
+          (setq label anotes-default-remote-webpage-label)
+          (setq anote-dir anotes-default-webpage-note-directory)
+          )
+      (let ((label-item (anotes--label-item-contain-filename filename)))
+        (if label-item
+            (progn
+              (setq label (car label-item))
+              (setq anote-dir (cadr label-item)))
+          (setq label anotes-default-local-label)
+          (setq anote-dir anotes-default-local-note-directory))
+        ))
+    (setq anote-info (make-anotes-anote-info :label label :anote-file (anotes--anote-file-name label anote-dir)))
+
+    anote-info
+    )
+  )
 
 (defsubst anotes--note-file-directory-match-label (label)
   "Return note directory matching label"
   (let ((label-item (anotes--label-item-match-label label)))
     (if label-item
         (f-slash (cddr label-item))
-      (f-slash anotes-default-directory))))
+      (f-slash anotes-default-local-note-directory))))
 
 (defsubst anotes--directory-contain-file (filename)
   "Return base directory of filename"
@@ -162,26 +205,20 @@ currently displayed message, if any."
   (let ((label-item (anotes--label-item-contain-filename filename)))
     (if label-item
         (s-chop-prefix (f-full (cddr label-item)) note-file-name)
-      (s-chop-prefix (f-full anotes-default-directory) note-file-name)
+      (s-chop-prefix (f-full anotes-default-local-note-directory) note-file-name)
       )))
 
-(defun anotes--current-line-number ()
-  ""
-  (line-number-at-pos)
-  )
-
-(defun anotes--current-time()
+(defsubst anotes--current-time()
   ""
   (time-convert nil 'integer))
 
-(defun anotes--current-time-readable()
+(defsubst anotes--current-time-readable()
   ""
   (format-time-string "%Y%m%d%H%M%S"))
 
-(defun anotes--id ()
+(defsubst anotes--id ()
   "Note id."
   (+ (* (anotes--current-time) 1000) (random 999)))
-
 
 (defsubst anotes--remove-html-anchor (url)
   ""
@@ -191,6 +228,38 @@ currently displayed message, if any."
         url
       (substring url 0 pos-of-anchor))))
 
+(defun anotes--buffer-info (&optional buffer)
+  (let (buffer-info uri type label-item label anote-info)
+    (with-current-buffer (or buffer (current-buffer))
+      (cond
+       ((or (derived-mode-p 'text-mode 'prog-mode))
+        (setq type 'text)
+        (setq uri (anotes--buffer-file-name))
+        (setq anote-info (anotes--file-anote-info uri type))
+        )
+       ((eq major-mode 'eww-mode)
+        (let ((buffer-url (eww-current-url)))
+          (if (anotes--local-webpage buffer-url)
+              (progn
+                (setq type 'local-webpage)
+                (setq uri (anotes--buffer-file-name)))
+            (setq type 'remote-webpage)
+            (setq uri buffer-url))
+          (setq anote-info (anotes--file-anote-info uri type))
+          )
+        )
+       ;; TODO pdf
+       (t
+        (setq type 'unknown)
+        ))
+      )
+    (if (eq type 'unknown)
+        (setq buffer-info (make-anotes-buffer-info :type 'unknown))
+      (setq buffer-info (make-anotes-buffer-info :type type :uri uri :anote-info anote-info)))
+
+    buffer-info
+    )
+  )
 
 (defun anotes--buffer-file-name()
   ""
@@ -206,25 +275,19 @@ currently displayed message, if any."
    (t
     (buffer-file-name))))
 
-(defun anotes--remote-webpage ()
+(defun anotes--remote-webpage-buffer? ()
   (with-current-buffer (current-buffer)
     (when (eq major-mode 'eww-mode)
       (let ((buffer-url (eww-current-url)))
-        (or (string-prefix-p "http://" buffer-url)
-            (string-prefix-p "https://" buffer-url))))))
+        (anotes--remote-webpage buffer-url)))))
 
 (defun anotes--remote-webpage-url ()
   (let ((buffer-url (eww-current-url)))
     buffer-url))
 
-(defun anotes--local-webpage ()
+(defun anotes--local-webpage-buffer? ()
   (with-current-buffer (current-buffer)
     (eq major-mode 'eww-mode)))
-
-(defun anotes--absolute-point ()
-  (save-excursion
-    (save-restriction
-      (point))))
 
 (defun anotes--new-note-in-text-buffer ()
   "Create a new piece of note in a text-mode/prog-mode/eww-mode buffer."
@@ -240,16 +303,20 @@ currently displayed message, if any."
         (progn
           (setq start (copy-marker (region-beginning)))
           (setq end (copy-marker (region-end)))
-          (setq context (buffer-substring-no-properties (region-beginning) (region-end))))
-      (setq start (copy-marker (anotes--absolute-point)))
-      (setq end (copy-marker start))
+          (setq context (buffer-substring-no-properties (region-beginning) (region-end)))
+          (deactivate-mark))
+      (setq start (copy-marker (line-beginning-position)))
+      (setq end (copy-marker (line-end-position)))
       (setq context ""))
     (setq annotation (read-string "Annotation: "))
     (setq tags (read-string "Tags(seperated with comma): "))
     (unless tags
       (setq tags ""))
 
-    (setq live-note (make-anotes-live-note :id id :tags tags :context context :annotation annotation :type ANOTES-CHAR-POS :start start :end end))
+    (unless (and (string-empty-p context)
+                 (string-empty-p annotation))
+      (setq live-note (make-anotes-live-note :id id :tags tags :context context :annotation annotation :type ANOTES-CHAR-POS :start start :end end))
+      )
 
     live-note
     )
@@ -260,53 +327,167 @@ currently displayed message, if any."
   (user-error "Not Implemented!")
   )
 
-(defun anotes--display-live-note (live-note)
+(defvar-local anotes--overlays (ht-create)
+  "All overlays created in current buffer. Key is note id and value is an overlay.")
+(defvar-local anotes--live-notes (ht-create)
+  "All live notes in current buffer. Key is note id and value is an `anotes-live-note'.")
+
+(defvar anotes--label-notes (ht-create)
+  "All notes loaded. Key is label, value is a hash table too, whose key is filename/url and value is an `anotes-note'.")
+
+(defun anotes--save-or-update-note (note label)
+  (let (label-anotes id)
+    (setq id (anotes-note-id note))
+    (setq label-anotes (ht-get anotes--label-notes label))
+    (unless label-anotes
+      (setq label-anotes (ht-create)))
+    (ht-set label-anotes id note)
+
+    (ht-set anotes--label-notes label label-anotes)
+    )
   )
 
-(defvar-local anotes--overlays nil)
-(defun anotes--add-margin-property (start end text)
+(defun anotes--delete-note (id)
+  (let (label-anotes live-note)
+    (setq live-note (ht-get anotes--live-notes id))
+    (when live-note
+      (setq label (anotes-live-note-label live-note))
+      (setq label-anotes (ht-get anotes--label-notes label))
+      (when label-anotes
+        (ht-remove label-anotes id)
+        (ht-set anotes--label-notes label label-anotes))
+      (ht-remove anotes--live-notes id)))
+  )
+
+(defun anotes--display-note (live-note)
+  "Display note using overlay in text buffer."
+  (let (start end text id label)
+    (setq start (anotes-live-note-start live-note))
+    (setq end (anotes-live-note-end live-note))
+    (setq text (anotes-live-note-annotation live-note))
+    (setq id (anotes-live-note-id live-note))
+
+    (anotes--add-overlay id start end text)
+    )
+  )
+
+(defun anotes--add-overlay (id start end text)
   (let ((ov (make-overlay start end)))
     (overlay-put ov 'before-string (propertize (buffer-substring start end) 'display (list (list 'margin 'right-margin) text)))
     (overlay-put ov 'face '(:underline t))
     (overlay-put ov 'help-echo text)
-    (push ov anotes--overlays)
+    (overlay-put ov :id id)
+    (overlay-put ov :type 'anotes)
+
+    (ht-set anotes--overlays id ov)
     )
   )
 
-(defun anotes--remove-overlays ()
-  (setq anotes--overlays nil)
+(defun anotes--remove-all-overlays ()
+  (setq anotes--overlays (ht-create))
   (remove-overlays)
+  )
+
+(defsubst anotes--overlays-in (beg end)
+  "Get a list of anotes overlays between beg and end points."
+  (let (L)
+    (dolist (ov (overlays-in beg end))
+      (when (eq (overlay-get ov :type)
+                'anotes)
+        (push ov L)))
+    L))
+
+(defun anotes--get-overlays-at-point ()
+  (let ((pos (point))
+        overlays)
+    (setq overlays (anotes--overlays-in pos pos))
+
+    overlays
+    )
+  )
+
+(defun anotes-delete-note-at-point ()
+  "Delete existing live-note at point."
+  (interactive)
+  (let (id live-note label)
+    (dolist (ov (anotes--get-note-at-point))
+      (setq id (overlay-get ov :id))
+      (anotes--delete-note id)
+      (delete-overlay ov)
+      )
+    )
   )
 
 (defun anotes-add-note ()
   "Add a new piece of note, save it to a note file, and display it in current buffer if possible."
   (interactive)
-  (let (note
+  (let ((buffer-info (anotes--buffer-info))
+        label
+        note
         live-note
-        file-name
-        )
+        id
+        filename
+        type
+        anote-file)
+    (setq type (anotes-buffer-info-type buffer-info))
     (cond
-     ((or (derived-mode-p 'text-mode)
-          (derived-mode-p 'prog-mode)
-          )
-      (setq file-name (anotes--buffer-file-name))
+     ((eq type 'text)
+      (setq label (anotes-anote-info-label (anotes-buffer-info-anote-info buffer-info)))
       (setq live-note (anotes--new-note-in-text-buffer))
-      (setq note (anotes-from-live-note live-note))
-      )
-     ((eq major-mode 'eww-mode)
-      (if (anotes--local-webpage)
-          (progn
-            (setq file-name (anotes--buffer-file-name))
-            (setq live-note (anotes--new-note-in-text-buffer))
-            )
-        (setq file-name (anotes--remote-webpage-url))
-        (setq live-note (anotes--new-note-in-text-buffer))
+      (when live-note
+        (setq id (anotes-live-note-id live-note))
+
+        (ht-set anotes--live-notes id live-note)
+
+        (setq note (anotes-from-live-note live-note))
+        (anotes--save-or-update-note note label)
+
+        (anotes--display-note live-note)
         )
+      )
+     ((eq type 'local-webpage)
+      )
+     ((eq type 'remote-webpage)
       )
      (t
-      ))
+      (user-error "Not supported."))
+     )
     )
   )
+
+(defun anotes--load ()
+  "Load notes of label current buffer belongs to."
+  ;; TODO
+  )
+
+(defun anotes--save ()
+  "Save notes of current buffer."
+  ;; TODO
+  (setq anotes--live-notes (ht-create))
+  )
+
+(defvar anotes-mode-map
+  (let ((map (make-sparse-keymap)))
+    map))
+
+;; TODO kill buffer hook, find file hook, emacs exit hook.
+(define-minor-mode anotes-local-mode
+  "The minor mode for taking notes."
+  :keymap anotes-mode-map
+  (let (buffer-info (anotes--buffer-info))
+    (if anotes-local-mode
+        (progn
+          (setq right-margin-width anotes-right-margin-width)
+          (set-window-margins (get-buffer-window (current-buffer)) 0 right-margin-width)
+          (anotes--load)
+          )
+      (set-window-margins (get-buffer-window (current-buffer)) nil nil)
+      (anotes--save)
+      (anotes--remove-all-overlays)
+      )
+    )
+  )
+
 
 
 (provide 'anotes)

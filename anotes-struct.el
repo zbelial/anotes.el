@@ -62,6 +62,7 @@
   (tags) ;; tag seperated with comma
   (context) ;; text selected 
   (annotation)
+  (label)
   (note-file) ;; for a large note, it can be write to an org file.
   (range) ;; anotes-range
   )
@@ -72,6 +73,7 @@
   (tags) ;; tag seperated with comma
   (context) ;; text selected 
   (annotation)
+  (label)
   (note-file) ;; for a large note, it can be write to an org file.
   (type)
   (start) ;; marker or percent
@@ -86,6 +88,7 @@
         (start (anotes-live-note-start live-note))
         (end (anotes-live-note-end live-note))
         (id (anotes-live-note-id live-note))
+        (label (anotes-live-note-label live-note))
         (note-file (anotes-live-note-note-file live-note))
         start-pos end-pos range
         note)
@@ -97,7 +100,7 @@
       (setq start-pos start)
       (setq end-pos end))
     (setq range (make-anotes-range :type type :start-pos start-pos :end-pos end-pos))  
-    (setq note (make-anotes-note :id id :tags tags :context context :annotation annotation :range range :note-file note-file))
+    (setq note (make-anotes-note :id id :tags tags :context context :annotation annotation :range range :label label :note-file note-file))
 
     note
     )
@@ -108,6 +111,7 @@
         (tags (anotes-note-tags note))
         (context (anotes-note-context note))
         (annotation (anotes-note-annotation note))
+        (label (anotes-note-label note))
         (note-file (anotes-note-note-file note))
         (range (anotes-note-range note))
         type start end range
@@ -120,8 +124,20 @@
           )
       (setq start (anotes-range-start-pos range))
       (setq end (anotes-range-end-pos range)))
-    (setq live-note (make-anotes-live-note :id id :tags tags :context context :annotation annotation :note-file note-file :type type :start start :end end))
+    (setq live-note (make-anotes-live-note :id id :tags tags :context context :annotation annotation :label label :note-file note-file :type type :start start :end end))
 
     live-note
     )  
   )
+
+(cl-defstruct anotes-anote-info
+  (label)
+  (anote-file))
+
+(cl-defstruct anotes-buffer-info
+  (type) ;; symbol: text pdf local-webpage remote-webpage unknown
+  (uri)
+  (anote-info)
+  )
+
+(provide 'anotes-struct)
