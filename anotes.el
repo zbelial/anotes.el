@@ -52,6 +52,17 @@
   :prefix "anotes-"
   :group 'tools)
 
+;;; Face
+(defface anotes-highlight
+  '((t (:underline (:color "coral" :style wave))))
+  "Face for annotation highlights."
+  :group 'anotes)
+
+(defface anotes-annotation
+  '((t (:background "coral" :foreground "black" :inherit default)))
+  "Face for annotations."
+  :group 'anotes)
+
 ;;; Custom
 (defcustom anotes-default-local-note-directory user-emacs-directory
   "The default directory used to store notes."
@@ -229,14 +240,16 @@ currently displayed message, if any."
       (substring url 0 pos-of-anchor))))
 
 (defun anotes--buffer-info (&optional buffer)
-  (let (buffer-info uri type label-item label anote-info)
+  (let ((type 'unsupported)
+        buffer-info uri label-item label anote-info)
     (with-current-buffer (or buffer (current-buffer))
       (cond
        ((or (derived-mode-p 'text-mode 'prog-mode))
-        (setq type 'text)
         (setq uri (anotes--buffer-file-name))
-        (setq anote-info (anotes--file-anote-info uri type))
-        )
+        (when uri
+          (setq type 'text)
+          (setq anote-info (anotes--file-anote-info uri type))
+          ))
        ((eq major-mode 'eww-mode)
         (let ((buffer-url (eww-current-url)))
           (if (anotes--local-webpage buffer-url)
@@ -250,11 +263,11 @@ currently displayed message, if any."
         )
        ;; TODO pdf
        (t
-        (setq type 'unknown)
+        (setq type 'unsupported)
         ))
       )
-    (if (eq type 'unknown)
-        (setq buffer-info (make-anotes-buffer-info :type 'unknown))
+    (if (eq type 'unsupported)
+        (setq buffer-info (make-anotes-buffer-info :type 'unsupported))
       (setq buffer-info (make-anotes-buffer-info :type type :uri uri :anote-info anote-info)))
 
     buffer-info
@@ -327,10 +340,17 @@ currently displayed message, if any."
   (user-error "Not Implemented!")
   )
 
-(defvar-local anotes--overlays (ht-create)
+(defvar anotes--overlays (ht-create)
   "All overlays created in current buffer. Key is note id and value is an overlay.")
-(defvar-local anotes--live-notes (ht-create)
+(make-variable-buffer-local 'anotes--overlays)
+
+(defvar anotes--live-notes (ht-create)
   "All live notes in current buffer. Key is note id and value is an `anotes-live-note'.")
+(make-variable-buffer-local 'anotes--live-notes)
+
+(defvar anotes--buffer-info nil
+  "`anotes-buffer-info' of current buffer.")
+(make-variable-buffer-local 'anotes--buffer-info)
 
 (defvar anotes--label-notes (ht-create)
   "All notes loaded. Key is label, value is a hash table too, whose key is filename/url and value is an `anotes-note'.")
@@ -373,14 +393,19 @@ currently displayed message, if any."
 
 (defun anotes--add-overlay (id start end text)
   (let ((ov (make-overlay start end)))
-    (overlay-put ov 'before-string (propertize (buffer-substring start end) 'display (list (list 'margin 'right-margin) text)))
-    (overlay-put ov 'face '(:underline t))
+    (overlay-put ov 'before-string (propertize "o" 'display (list (list 'margin 'right-margin) (propertize text 'face 'anotes-annotation))))
+    (overlay-put ov 'face 'anotes-highlight)
     (overlay-put ov 'help-echo text)
     (overlay-put ov :id id)
     (overlay-put ov :type 'anotes)
 
     (ht-set anotes--overlays id ov)
     )
+  )
+
+(defun anotes--clear ()
+  (anotes--remove-all-overlays)
+  (setq anotes--buffer-info nil)
   )
 
 (defun anotes--remove-all-overlays ()
@@ -409,8 +434,11 @@ currently displayed message, if any."
 (defun anotes-delete-note-at-point ()
   "Delete existing live-note at point."
   (interactive)
+  (when (not anotes-local-mode)
+    (user-error "Enable anotes-local-mode first.")
+    )
   (let (id live-note label)
-    (dolist (ov (anotes--get-note-at-point))
+    (dolist (ov (anotes--get-overlays-at-point))
       (setq id (overlay-get ov :id))
       (anotes--delete-note id)
       (delete-overlay ov)
@@ -421,6 +449,9 @@ currently displayed message, if any."
 (defun anotes-add-note ()
   "Add a new piece of note, save it to a note file, and display it in current buffer if possible."
   (interactive)
+  (when (not anotes-local-mode)
+    (user-error "Enable anotes-local-mode first.")
+    )
   (let ((buffer-info (anotes--buffer-info))
         label
         note
@@ -431,7 +462,10 @@ currently displayed message, if any."
         anote-file)
     (setq type (anotes-buffer-info-type buffer-info))
     (cond
-     ((eq type 'text)
+     ((or (eq type 'text)
+          (eq type 'local-webpage)
+          (eq type 'remote-webpage)
+          )
       (setq label (anotes-anote-info-label (anotes-buffer-info-anote-info buffer-info)))
       (setq live-note (anotes--new-note-in-text-buffer))
       (when live-note
@@ -445,25 +479,37 @@ currently displayed message, if any."
         (anotes--display-note live-note)
         )
       )
-     ((eq type 'local-webpage)
-      )
-     ((eq type 'remote-webpage)
-      )
      (t
       (user-error "Not supported."))
      )
     )
   )
 
-(defun anotes--load ()
+(defun anotes-recover-data ()
+  "Load notes of current buffer from the tmp anote file.
+Called interactively to recover data."
+  ;; TODO
+  (interactive)
+  )
+
+(defun anotes--load-same-label ()
   "Load notes of label current buffer belongs to."
   ;; TODO
   )
 
-(defun anotes--save ()
-  "Save notes of current buffer."
+(defun anotes--save-to-tmp ()
+  "Save notes of current buffer to a file in /tmp.
+Called whenever `anotes--live-notes' is modified."
   ;; TODO
   (setq anotes--live-notes (ht-create))
+  )
+
+(defun anotes--save-same-label ()
+  "Save all notes having same label with current buffer."
+  )
+
+(defun anotes--save-all ()
+  "Save all notes."
   )
 
 (defvar anotes-mode-map
@@ -474,16 +520,31 @@ currently displayed message, if any."
 (define-minor-mode anotes-local-mode
   "The minor mode for taking notes."
   :keymap anotes-mode-map
-  (let (buffer-info (anotes--buffer-info))
+  (let ((buffer-info (anotes--buffer-info))
+        type)
     (if anotes-local-mode
         (progn
-          (setq right-margin-width anotes-right-margin-width)
-          (set-window-margins (get-buffer-window (current-buffer)) 0 right-margin-width)
-          (anotes--load)
+          (setq type (anotes-buffer-info-type buffer-info))
+          (if (eq type 'unsupported)
+              (progn
+                (anotes-local-mode -1)
+                (user-error "Not supported by anotes.")
+                )
+            (setq anotes--buffer-info buffer-info)
+
+            (setq anotes--overlays (ht-create))
+            (setq anotes--live-notes (ht-create))
+
+            (setq right-margin-width anotes-right-margin-width)
+            (set-window-margins (get-buffer-window (current-buffer)) 0 right-margin-width)
+
+            (anotes--load-same-label)
+            )
           )
+      (anotes--save-same-label)
+      (anotes--clear)
+
       (set-window-margins (get-buffer-window (current-buffer)) nil nil)
-      (anotes--save)
-      (anotes--remove-all-overlays)
       )
     )
   )

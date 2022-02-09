@@ -135,7 +135,7 @@
   (anote-file))
 
 (cl-defstruct anotes-buffer-info
-  (type) ;; symbol: text pdf local-webpage remote-webpage unknown
+  (type) ;; symbol: text pdf local-webpage remote-webpage unsupported
   (uri)
   (anote-info)
   )
