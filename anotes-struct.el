@@ -138,6 +138,10 @@
 (cl-defstruct anotes-buffer-info
   (type) ;; symbol: text pdf local-webpage remote-webpage unsupported
   (uri) ;; filename or webpage url
+  (label)
+  (filedir) ;; base directory name of file, for remote webpage, this is an empty string
+  (anote-dir)
+  (anote-file)
   (anote-info)
   )
 
