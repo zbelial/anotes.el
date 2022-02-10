@@ -196,14 +196,6 @@ currently displayed message, if any."
         (f-slash (cddr label-item))
       (f-slash anotes-default-local-note-directory))))
 
-;; (defsubst anotes--directory-contain-file (filename)
-;;   "Return base directory of filename"
-;;   (let ((label-item (anotes--label-item-contain-filename filename)))
-;;     (if label-item
-;;         (f-slash (cadr label-item))
-;;       "/"
-;;       )))
-
 (defsubst anotes--directory-match-label (label)
   "Return base directory of label"
   (let ((label-item (anotes--label-item-match-label label)))
@@ -213,21 +205,6 @@ currently displayed message, if any."
           ""
         "/"
         ))))
-
-;; (defsubst anotes--file-relative-path (filename)
-;;   "Return relative path of filename."
-;;   (let ((label-item (anotes--label-item-contain-filename filename)))
-;;     (if label-item
-;;         (s-chop-prefix (f-full (cadr label-item)) filename)
-;;       (s-chop-prefix "/" filename))))
-
-;; (defsubst anotes--note-file-relative-path (filename note-file-name)
-;;   "Return relative path of filename to anotes--file-base-directory"
-;;   (let ((label-item (anotes--label-item-contain-filename filename)))
-;;     (if label-item
-;;         (s-chop-prefix (f-full (cddr label-item)) note-file-name)
-;;       (s-chop-prefix (f-full anotes-default-local-note-directory) note-file-name)
-;;       )))
 
 (defsubst anotes--current-time()
   ""
@@ -523,9 +500,11 @@ in which, key is id, and value is `anote-live-note'.")
     (anotes--remove-all-overlays)
     (setq anotes--live-notes (ht-create))
     (setq full-file-name (f-expand file (anotes--directory-match-label label)))
+    (message "full-file-name %s" full-file-name)
     (when notes
       (dolist (note notes)
         (setq live-note (anotes-to-live-note note))
+        (message "live-note %S" live-note)
         (setq id (anotes-live-note-id live-note))
         (anotes--save-or-update-note live-note label full-file-name)
         )
@@ -539,6 +518,7 @@ in which, key is id, and value is `anote-live-note'.")
     (setq uri (anotes-buffer-info-uri anotes--buffer-info))
     (setq label (anotes-anote-info-label (anotes-buffer-info-anote-info anotes--buffer-info)))
     (setq tmp-file (concat (f-full anotes-tmp-note-directory) (md5 uri) ".anote"))
+    (message "tmp-file %s" tmp-file)
 
     (anotes--delete-buffer-notes label uri)
     (when (f-exists-p tmp-file)
@@ -552,6 +532,7 @@ in which, key is id, and value is `anote-live-note'.")
 Called interactively to recover data."
   (interactive)
   (anotes--recover-data)
+  (anotes--restore-file-notes)
   )
 
 (defun anotes--load-same-label ()
