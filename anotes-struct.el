@@ -63,7 +63,7 @@
   (context) ;; text selected 
   (annotation)
   (label)
-  (note-file) ;; for a large note, it can be write to an org file.
+  (note-file) ;; for a large note, it can be writen to an org file.
   (range) ;; anotes-range
   )
 
@@ -74,7 +74,7 @@
   (context) ;; text selected 
   (annotation)
   (label)
-  (note-file) ;; for a large note, it can be write to an org file.
+  (note-file) ;; for a large note, it can be writen to an org file.
   (type)
   (start) ;; marker or percent
   (end) ;; marker or percent
@@ -114,7 +114,7 @@
         (label (anotes-note-label note))
         (note-file (anotes-note-note-file note))
         (range (anotes-note-range note))
-        type start end range
+        type start end
         live-note)
     (setq type (anotes-range-type range))
     (if (equal type ANOTES-CHAR-POS)
@@ -127,16 +127,17 @@
     (setq live-note (make-anotes-live-note :id id :tags tags :context context :annotation annotation :label label :note-file note-file :type type :start start :end end))
 
     live-note
-    )  
+    )
   )
 
 (cl-defstruct anotes-anote-info
   (label)
-  (anote-file))
+  (filedir) ;; base directory name of file, for remote webpage, this is an empty string
+  (anote-dir))
 
 (cl-defstruct anotes-buffer-info
   (type) ;; symbol: text pdf local-webpage remote-webpage unsupported
-  (uri)
+  (uri) ;; filename or webpage url
   (anote-info)
   )
 
