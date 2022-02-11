@@ -609,6 +609,7 @@ in which, key is id, and value is `anotes-note'.")
 
 (define-minor-mode anotes-local-mode
   "The minor mode for taking notes."
+  :lighter " AN"
   :keymap anotes-mode-map
   (if anotes-local-mode
       (let ((buffer-info (anotes--buffer-info))
@@ -642,6 +643,7 @@ in which, key is id, and value is `anotes-note'.")
 
     (remove-hook 'after-save-hook #'anotes--save-buffer-hook t)
 
+    (setq right-margin-width 0)
     (set-window-margins (get-buffer-window (current-buffer)) nil nil)
     )
   )
