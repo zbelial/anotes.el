@@ -322,8 +322,8 @@ in which, key is id, and value is `anote-live-note'.")
     (when label-notes
       (ht-remove label-notes uri))))
 
-(defun anotes--delete-note (id)
-  (let (label-notes file-notes live-note uri label)
+(defun anotes--delete-note (id &optional redisplay)
+  (let (label-notes file-notes live-note uri label ov)
     (setq uri (anotes-buffer-info-uri anotes--buffer-info))
     (setq label (anotes-buffer-info-label anotes--buffer-info))
     (setq label-notes (ht-get anotes--label-notes label))
@@ -333,15 +333,28 @@ in which, key is id, and value is `anote-live-note'.")
         (ht-remove file-notes id)
         (ht-set label-notes uri file-notes)
         (ht-set anotes--label-notes label label-notes)))
-    (ht-remove anotes--buffer-notes id)))
+    (ht-remove anotes--buffer-notes id)
 
-(defun anotes--display-note (live-note)
+    (anotes--save-same-label label)
+    
+    (when redisplay
+      (setq ov (ht-get anotes--overlays id))
+      (when ov
+        (delete-overlay ov)))))
+
+(defun anotes--redisplay-note (live-note)
   "Display note using overlay in text buffer."
-  (let (start end text id label)
+  (let (start end text id label old-ov)
     (setq start (anotes-live-note-start live-note))
     (setq end (anotes-live-note-end live-note))
     (setq text (anotes-live-note-annotation live-note))
     (setq id (anotes-live-note-id live-note))
+
+    (setq old-ov (ht-get anotes--overlays id))
+    (when old-ov
+      (delete-overlay old-ov)
+      (ht-remove anotes--overlays id)
+      )
 
     (anotes--add-overlay id start end text)
     )
@@ -388,6 +401,39 @@ in which, key is id, and value is `anote-live-note'.")
     )
   )
 
+(defun anotes--edit-note (id &optional redisplay)
+  (let ((note (ht-get anotes--buffer-notes id))
+        old-tags old-annotation
+        new-tags new-annotation
+        changed
+        (label (anotes-buffer-info-label anotes--buffer-info))
+        (uri (anotes-buffer-info-uri anotes--buffer-info))
+        )
+    (when note
+      (setq old-tags (anotes-live-note-tags note))
+      (setq old-annotation (anotes-live-note-annotation note))
+      (setq new-tags (read-string "Tags: " old-tags nil old-tags))
+      (setq new-annotation (read-string "Annotation: " old-annotation nil old-annotation))
+      (when (not (s-equals? old-tags new-tags))
+        (setq changed t)
+        (setf (anotes-live-note-tags note) new-tags)
+        )
+      (when (not (s-equals? old-annotation new-annotation))
+        (setq changed t)
+        (setf (anotes-live-note-annotation note) new-annotation)
+        )
+
+      (when changed
+        (anotes--save-or-update-note note label uri)
+        (anotes--save-same-label label)
+        (when redisplay
+          (anotes--redisplay-note note)
+          )
+        )
+      )
+    )
+  )
+
 (defun anotes-delete-note-at-point ()
   "Delete existing live-note at point."
   (interactive)
@@ -398,11 +444,8 @@ in which, key is id, and value is `anote-live-note'.")
     (setq label (anotes-buffer-info-label anotes--buffer-info))
     (dolist (ov (anotes--get-overlays-at-point))
       (setq id (overlay-get ov :id))
-      (anotes--delete-note id)
-      (delete-overlay ov)
+      (anotes--delete-note id t)
       )
-
-    (anotes--save-same-label label)
     )
   )
 
@@ -436,7 +479,7 @@ in which, key is id, and value is `anote-live-note'.")
 
         (anotes--save-same-label label)
 
-        (anotes--display-note live-note)
+        (anotes--redisplay-note live-note)
         )
       )
      (t
@@ -497,7 +540,7 @@ in which, key is id, and value is `anote-live-note'.")
 (defun anotes--display-file-notes ()
   (anotes--remove-all-overlays)
   (dolist (live-note (ht-values anotes--buffer-notes))
-    (anotes--display-note live-note)))
+    (anotes--redisplay-note live-note)))
 
 (defun anotes--write-to-file (anote-file live-notes uri &optional append)
   ""
