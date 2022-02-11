@@ -70,15 +70,19 @@
   )
 
 ;; sort in back-to-front order according to start.
-(defun ivy-anotes--sorter (note1 note2)
+(defun ivy-anotes--buffer-note-sorter (note1 note2)
   ;; TODO
+  (let ((start1 (anotes-live-note-start-pos note1))
+        (start2 (anotes-live-note-start-pos note2)))
+    (> start1 start2)
+    )
   )
 
 (defun ivy-anotes--buffer-candidates ()
   (let ((notes (ht-values anotes--buffer-notes))
         (uri (anotes-buffer-info-uri anotes--buffer-info))
         cand candidates uri)
-    (setq notes (cl-sort notes #'ivy-anotes--sorter))
+    (setq notes (cl-sort notes #'ivy-anotes--buffer-note-sorter))
     (dolist (note notes)
       (cl-pushnew (ivy-anotes--format-note (anotes-from-live-note note) uri) candidates)
       )
