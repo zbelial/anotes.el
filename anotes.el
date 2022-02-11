@@ -231,7 +231,7 @@ currently displayed message, if any."
       (setq label (anotes-anote-info-label anote-info))
       (setq anote-dir (anotes-anote-info-anote-dir anote-info))
       (setq filedir (anotes-anote-info-filedir anote-info))
-      (setq buffer-info (make-anotes-buffer-info :type type :uri uri :anote-info anote-info :label label :filedir filedir :anote-dir anote-dir :anote-file (anotes--anote-file-name label anote-dir))))
+      (setq buffer-info (make-anotes-buffer-info :type type :uri uri :label label :filedir filedir :anote-dir anote-dir :anote-file (anotes--anote-file-name label anote-dir))))
 
     buffer-info
     )
@@ -396,7 +396,7 @@ in which, key is id, and value is `anotes-note'.")
 (defsubst anotes--overlays-in (beg end)
   "Get a list of anotes overlays between beg and end points."
   (let (L)
-    (dolist (ov (overlays-in beg end))
+    (dolist (ov (overlays-in beg (1+ end)))
       (when (eq (overlay-get ov :type)
                 'anotes)
         (push ov L)))
@@ -519,10 +519,8 @@ in which, key is id, and value is `anotes-note'.")
 
 (defun anotes--load-same-label (label)
   "Load notes of label current buffer belongs to."
-  (let (label)
-    (when (not (ht-contains? anotes--label-notes label))
-      (anotes--load-label-notes label)
-      )
+  (when (not (ht-contains? anotes--label-notes label))
+    (anotes--load-label-notes label)
     )
   )
 
@@ -530,6 +528,7 @@ in which, key is id, and value is `anotes-note'.")
   (let (anote-dir anote-file)
     (setq anote-dir (anotes--note-file-directory-match-label label))
     (setq anote-file (anotes--anote-file-name label anote-dir))
+    (message "anotes--load-label-notes label %s, anote-dir %s, anote-file %s" label anote-dir anote-file)
     (when (f-exists-p anote-file)
       (load-file anote-file))))
 
@@ -543,6 +542,7 @@ in which, key is id, and value is `anotes-note'.")
       (setq file-notes (ht-get label-notes uri))
       (when file-notes
         (dolist (note (ht-values file-notes))
+          (message "anotes--retrieve-file-notes note %S" note)
           (setq id (anotes-note-id note))
           (ht-set anotes--buffer-notes id (anotes-to-live-note note)))))))
 
@@ -614,9 +614,9 @@ in which, key is id, and value is `anotes-note'.")
 (define-minor-mode anotes-local-mode
   "The minor mode for taking notes."
   :keymap anotes-mode-map
-  (let ((buffer-info (anotes--buffer-info))
-        type label)
-    (if anotes-local-mode
+  (if anotes-local-mode
+      (let ((buffer-info (anotes--buffer-info))
+            type label)
         (progn
           (setq type (anotes-buffer-info-type buffer-info))
           (if (eq type 'unsupported)
@@ -624,6 +624,7 @@ in which, key is id, and value is `anotes-note'.")
                 (anotes-local-mode -1)
                 (user-error "Not supported by anotes.")
                 )
+            (message "anotes-local-mode buffer-info %S" buffer-info)
             (setq label (anotes-buffer-info-label buffer-info))
             (setq anotes--buffer-info buffer-info)
 
@@ -640,13 +641,13 @@ in which, key is id, and value is `anotes-note'.")
             (add-hook 'after-save-hook #'anotes--save-buffer-hook nil t)
             )
           )
-      (anotes--save-same-label)
-      (anotes--clear)
+        )
+    (anotes--save-same-label)
+    (anotes--clear)
 
-      (remove-hook 'after-save-hook #'anotes--save-buffer-hook t)
+    (remove-hook 'after-save-hook #'anotes--save-buffer-hook t)
 
-      (set-window-margins (get-buffer-window (current-buffer)) nil nil)
-      )
+    (set-window-margins (get-buffer-window (current-buffer)) nil nil)
     )
   )
 

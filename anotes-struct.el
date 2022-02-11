@@ -135,7 +135,6 @@
   (filedir) ;; base directory name of file, for remote webpage, this is an empty string
   (anote-dir)
   (anote-file)
-  (anote-info)
   )
 
 (provide 'anotes-struct)
