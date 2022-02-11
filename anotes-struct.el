@@ -45,17 +45,6 @@
 (cl-defgeneric anotes-from-live-note (live-note)
   )
 
-
-(cl-defstruct anotes-position
-  (position)
-  )
-
-(cl-defstruct anotes-range
-  (type)
-  (start-pos) ;; anotes-position
-  (end-pos) ;; anotes-position
-  )
-
 (cl-defstruct anotes-note
   "Represent a note."
   (id)
@@ -63,8 +52,11 @@
   (context) ;; text selected 
   (annotation)
   (label)
-  (note-file) ;; for a large note, it can be writen to an org file.
-  (range) ;; anotes-range
+  (extra-note-file) ;; for a large note, it can be writen to an org file.
+  (pos-type)
+  (start-pos)
+  (end-pos)
+  (file-type) ;; symbol: text pdf local-webpage remote-webpage unsupported
   )
 
 (cl-defstruct anotes-live-note
@@ -74,33 +66,34 @@
   (context) ;; text selected 
   (annotation)
   (label)
-  (note-file) ;; for a large note, it can be writen to an org file.
-  (type)
-  (start) ;; marker or percent
-  (end) ;; marker or percent
+  (extra-note-file) ;; for a large note, it can be writen to an org file.
+  (pos-type)
+  (start-pos) ;; marker or percent
+  (end-pos) ;; marker or percent
+  (file-type) ;; symbol: text pdf local-webpage remote-webpage unsupported
   )
 
 (cl-defmethod anotes-from-live-note ((live-note anotes-live-note))
-  (let ((type (anotes-live-note-type live-note))
+  (let ((pos-type (anotes-live-note-pos-type live-note))
         (tags (anotes-live-note-tags live-note))
         (context (anotes-live-note-context live-note))
         (annotation (anotes-live-note-annotation live-note))
-        (start (anotes-live-note-start live-note))
-        (end (anotes-live-note-end live-note))
+        (start (anotes-live-note-start-pos live-note))
+        (end (anotes-live-note-end-pos live-note))
         (id (anotes-live-note-id live-note))
         (label (anotes-live-note-label live-note))
-        (note-file (anotes-live-note-note-file live-note))
+        (extra-note-file (anotes-live-note-extra-note-file live-note))
+        (file-type (anotes-live-note-file-type live-note))
         start-pos end-pos range
         note)
-    (if (equal type ANOTES-CHAR-POS)
+    (if (equal pos-type ANOTES-CHAR-POS)
         (progn
           (setq start-pos (marker-position start))
           (setq end-pos (marker-position end))
           )
       (setq start-pos start)
       (setq end-pos end))
-    (setq range (make-anotes-range :type type :start-pos start-pos :end-pos end-pos))  
-    (setq note (make-anotes-note :id id :tags tags :context context :annotation annotation :range range :label label :note-file note-file))
+    (setq note (make-anotes-note :id id :tags tags :context context :annotation annotation :pos-type pos-type :start-pos start-pos :end-pos end-pos :label label :extra-note-file extra-note-file :file-type file-type))
 
     note
     )
@@ -112,19 +105,19 @@
         (context (anotes-note-context note))
         (annotation (anotes-note-annotation note))
         (label (anotes-note-label note))
-        (note-file (anotes-note-note-file note))
-        (range (anotes-note-range note))
-        type start end
+        (extra-note-file (anotes-note-extra-note-file note))
+        (file-type (anotes-note-file-type note))
+        pos-type start-pos end-pos
         live-note)
-    (setq type (anotes-range-type range))
-    (if (equal type ANOTES-CHAR-POS)
+    (setq pos-type (anotes-note-pos-type note))
+    (if (equal pos-type ANOTES-CHAR-POS)
         (progn
-          (setq start (copy-marker (anotes-range-start-pos range)))
-          (setq end (copy-marker (anotes-range-end-pos range)))
+          (setq start-pos (copy-marker (anotes-note-start-pos note)))
+          (setq end-pos (copy-marker (anotes-note-end-pos note)))
           )
-      (setq start (anotes-range-start-pos range))
-      (setq end (anotes-range-end-pos range)))
-    (setq live-note (make-anotes-live-note :id id :tags tags :context context :annotation annotation :label label :note-file note-file :type type :start start :end end))
+      (setq start-pos (anotes-note-start-pos note))
+      (setq end-pos (anotes-note-end-pos note)))
+    (setq live-note (make-anotes-live-note :id id :tags tags :context context :annotation annotation :label label :extra-note-file extra-note-file :pos-type pos-type :start-pos start-pos :end-pos end-pos :file-type file-type))
 
     live-note
     )

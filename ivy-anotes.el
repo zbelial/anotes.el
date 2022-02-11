@@ -39,22 +39,31 @@
 (require 'ivy)
 (require 'ht)
 
+(defcustom ivy-anotes-auto-enable-anotes t
+  "Whether enable `anote-local-mode' of a buffer or not when jump to a note of that buffer."
+  :group 'anotes
+  :type 'boolean)
 
-(defun ivy-anotes--format-note (note)
+
+(defun ivy-anotes--format-note (note uri &optional with-file)
   (let (str
         meta
-        id context annotation start end uri tags
+        id context annotation start-pos end-pos tags pos-type file-type
         )
-    (setq id (anotes-live-note-id note))
-    (setq context (anotes-live-note-context note))
-    (setq annotation (anotes-live-note-annotation note))
-    (setq start (anotes-live-note-start note))
-    (setq end (anotes-live-note-end note))
-    (setq tags (anotes-live-note-tags note))
-    (setq uri (anotes-buffer-info-uri anotes--buffer-info))
+    (setq id (anotes-note-id note))
+    (setq context (anotes-note-context note))
+    (setq annotation (anotes-note-annotation note))
+    (setq start-pos (anotes-note-start-pos note))
+    (setq end-pos (anotes-note-end-pos note))
+    (setq pos-type (anotes-note-pos-type note))
+    (setq file-type (anotes-note-file-type note))
+    (setq tags (anotes-note-tags note))
 
-    (setq str (format "%20s - %60s" tags annotation))
-    (setq meta (list :id id :context context :annotation annotation :start start :end end :tags tags :uri uri))
+    (if (not with-file)
+        (setq str (format "%20s - %60s" tags annotation))
+      (setq str (format "%20s - %60s - %s" tags annotation (f-short uri)))
+      )
+    (setq meta (list :id id :context context :annotation annotation :start-pos start-pos :end-pos end-pos :tags tags :uri uri :pos-type pos-type :file-type file-type))
 
     (cons str meta)
     )
@@ -62,26 +71,25 @@
 
 ;; sort in back-to-front order according to start.
 (defun ivy-anotes--sorter (note1 note2)
+  ;; TODO
   )
 
 (defun ivy-anotes--buffer-candidates ()
   (let ((notes (ht-values anotes--buffer-notes))
-        cand candidates)
+        (uri (anotes-buffer-info-uri anotes--buffer-info))
+        cand candidates uri)
     (setq notes (cl-sort notes #'ivy-anotes--sorter))
     (dolist (note notes)
-      (cl-pushnew (ivy-anotes--format-note note) candidates)
+      (cl-pushnew (ivy-anotes--format-note (anotes-from-live-note note) uri) candidates)
       )
     candidates
     )
   )
 
-(defun ivy-anotes--label-candidates ()
-  )
-
 (defun ivy-anotes--buffer-jump (cand)
   (let ((meta (cdr cand))
         pos)
-    (setq pos (plist-get meta :start))
+    (setq pos (plist-get meta :start-pos))
     (goto-char pos)
     )
   )
@@ -95,7 +103,7 @@
       (when (not (string-empty-p current))
         (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
         (setq meta (cdr item))
-        (setq marker (plist-get meta :start))
+        (setq marker (plist-get meta :start-pos))
         (goto-char marker)
         (recenter)
         (let ((pulse-delay 0.05))
@@ -125,6 +133,9 @@
 
 (defvar ivy-anotes--opoint nil)
 (defun ivy-anotes ()
+  (when (not anotes-local-mode)
+    (user-error "Enable anotes-local-mode first.")
+    )
   (interactive)
   (setq ivy-anotes--opoint (point))
   (let (candidates res)
@@ -138,6 +149,7 @@
                                       ("d" ivy-anotes--buffer-note-delete "Delete note.")
                                       )
                             :update-fn #'ivy-anotes--buffer-preview
+                            :caller #'ivy-anotes
                             ))
       (unless res
         (goto-char ivy-anotes--opoint)
@@ -145,3 +157,112 @@
       )
     )
   )
+
+(defun ivy-anotes--label-candidates ()
+  (let (label
+        (buffer-info anotes--buffer-info)
+        pos-type
+        label-notes file-notes
+        candidates)
+    (if buffer-info
+        (setq label (anotes-buffer-info-label buffer-info))
+      (setq buffer-info (anotes--buffer-info))
+      (setq pos-type (anotes-buffer-info-type buffer-info))
+      (when (eq pos-type 'unsupported)
+        (user-error "Not supported."))
+      (setq label (anotes-buffer-info-label buffer-info))
+      )
+    (message "ivy-anotes-label label %s" label)
+    (setq label-notes (ht-get anotes--label-notes label))
+    (when (not label-notes)
+      (anotes--load-label-notes label)
+      (setq label-notes (ht-get anotes--label-notes label)))
+    (when label-notes
+      (dolist (uri (ht-keys label-notes))
+        (setq file-notes (ht-get label-notes uri))
+        (dolist (note (ht-values file-notes))
+          (cl-pushnew (ivy-anotes--format-note note uri t) candidates)
+          )
+        )
+      )
+    candidates
+    )
+  )
+
+(defun ivy-anotes--existing-eww-buffer (uri)
+  (let ((buffers (buffer-list))
+        target)
+    (dolist (buffer buffers)
+      (with-current-buffer buffer
+        (when (and
+               (eq major-mode 'eww-mode)
+               (or (equal uri (anotes--buffer-file-name))
+                   (equal uri (eww-current-url))
+                   ))
+          (setq target buffer))))
+    target))
+
+(defun ivy-anotes--label-jump (cand)
+  (let ((meta (cdr cand))
+        file-type pos-type
+        uri
+        pos)
+    (setq uri (plist-get meta :uri))
+    (setq pos (plist-get meta :start-pos))
+    (setq file-type (plist-get meta :file-type))
+    (setq pos-type (plist-get meta :pos-type))
+    (cond
+     ((eq file-type 'text)
+      (find-file uri)
+      (goto-char pos)
+      (recenter)
+      )
+     ((eq file-type 'local-webpage)
+      (let ((buffer (ivy-anotes--existing-eww-buffer uri))
+            )
+        (if buffer
+            (progn
+              (switch-to-buffer buffer)
+              (goto-char pos)
+              (recenter))
+          (eww (s-concat "file://" file) 4)
+          (goto-char pos)
+          (recenter)))      
+      )
+     ((eq file-type 'remote-webpage)
+      (let ((buffer (ivy-anotes--existing-eww-buffer uri))
+            )
+        (if buffer
+            (progn
+              (switch-to-buffer buffer)
+              (goto-char pos)
+              (recenter))
+          (eww-browse-url uri t)
+          (goto-char pos)
+          (recenter)))
+      )
+     (t
+      (user-error "Internal error - unknown type.")
+      )
+     )
+    (when (and
+           ivy-anotes-auto-enable-anotes
+           (not anotes-local-mode))
+      (anotes-local-mode t))
+    )
+  )
+
+(defun ivy-anotes-label ()
+  (interactive)
+  (let (candidates res)
+    (setq candidates (ivy-anotes--label-candidates))
+    (ivy-read "Notes: " candidates
+              :action '(1
+                        ("j" ivy-anotes--label-jump "Jump to note position.")
+                        )
+              :caller #'ivy-anotes-label
+              )    
+    )
+  )
+
+(provide 'ivy-anotes)

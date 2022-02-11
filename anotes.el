@@ -173,6 +173,16 @@ currently displayed message, if any."
         "/"
         ))))
 
+(defsubst anotes--file-label (filename)
+  "Return label of filename"
+  (let ((label-item (anotes--label-item-contain-filename filename)))
+    (if label-item
+        (car label-item)
+      (if (anotes--remote-webpage filename)
+          anotes-default-remote-webpage-label
+        anotes-default-local-label
+        ))))
+
 (defsubst anotes--current-time()
   ""
   (time-convert nil 'integer))
@@ -241,7 +251,7 @@ currently displayed message, if any."
    (t
     (buffer-file-name))))
 
-(defun anotes--new-note-in-text-buffer ()
+(defun anotes--new-note-in-text-buffer (type)
   "Create a new piece of note in a text-mode/prog-mode/eww-mode buffer."
   (let ((id (anotes--id))
         (tags "")
@@ -270,7 +280,7 @@ currently displayed message, if any."
 
     (unless (and (string-empty-p context)
                  (string-empty-p annotation))
-      (setq live-note (make-anotes-live-note :id id :tags tags :context context :annotation annotation :type ANOTES-CHAR-POS :start start :end end :label label))
+      (setq live-note (make-anotes-live-note :id id :tags tags :context context :annotation annotation :pos-type ANOTES-CHAR-POS :start-pos start :end-pos end :label label :file-type type))
       )
 
     live-note
@@ -296,7 +306,7 @@ currently displayed message, if any."
 
 (defvar anotes--label-notes (ht-create)
   "All notes loaded. Key is label, value is a hash table too, whose key is filename/url and value is hashtable,
-in which, key is id, and value is `anote-live-note'.")
+in which, key is id, and value is `anotes-note'.")
 
 (defun anotes--save-or-update-note (live-note label uri)
   (let (label-notes id file-notes)
@@ -308,22 +318,22 @@ in which, key is id, and value is `anote-live-note'.")
     (unless file-notes
       (setq file-notes (ht-create)))
 
-    (ht-set file-notes id live-note)
+    (ht-set file-notes id (anotes-from-live-note live-note))
     (ht-set label-notes uri file-notes)
     (ht-set anotes--label-notes label label-notes)
     )
   )
 
-(defun anotes--delete-buffer-notes (&optional label uri)
-  (let ((label (or label (anotes-buffer-info-label anotes--buffer-info)))
-        (uri (or uri (anotes-buffer-info-uri anotes--buffer-info)))
-        label-notes)
-    (setq label-notes (ht-get anotes--label-notes label))
-    (when label-notes
-      (ht-remove label-notes uri))))
+;; (defun anotes--delete-buffer-notes (&optional label uri)
+;;   (let ((label (or label (anotes-buffer-info-label anotes--buffer-info)))
+;;         (uri (or uri (anotes-buffer-info-uri anotes--buffer-info)))
+;;         label-notes)
+;;     (setq label-notes (ht-get anotes--label-notes label))
+;;     (when label-notes
+;;       (ht-remove label-notes uri))))
 
 (defun anotes--delete-note (id &optional redisplay)
-  (let (label-notes file-notes live-note uri label ov)
+  (let (label-notes file-notes uri label ov)
     (setq uri (anotes-buffer-info-uri anotes--buffer-info))
     (setq label (anotes-buffer-info-label anotes--buffer-info))
     (setq label-notes (ht-get anotes--label-notes label))
@@ -345,8 +355,8 @@ in which, key is id, and value is `anote-live-note'.")
 (defun anotes--redisplay-note (live-note)
   "Display note using overlay in text buffer."
   (let (start end text id label old-ov)
-    (setq start (anotes-live-note-start live-note))
-    (setq end (anotes-live-note-end live-note))
+    (setq start (anotes-live-note-start-pos live-note))
+    (setq end (anotes-live-note-end-pos live-note))
     (setq text (anotes-live-note-annotation live-note))
     (setq id (anotes-live-note-id live-note))
 
@@ -402,32 +412,32 @@ in which, key is id, and value is `anote-live-note'.")
   )
 
 (defun anotes--edit-note (id &optional redisplay)
-  (let ((note (ht-get anotes--buffer-notes id))
+  (let ((live-note (ht-get anotes--buffer-notes id))
         old-tags old-annotation
         new-tags new-annotation
         changed
         (label (anotes-buffer-info-label anotes--buffer-info))
         (uri (anotes-buffer-info-uri anotes--buffer-info))
         )
-    (when note
-      (setq old-tags (anotes-live-note-tags note))
-      (setq old-annotation (anotes-live-note-annotation note))
+    (when live-note
+      (setq old-tags (anotes-live-note-tags live-note))
+      (setq old-annotation (anotes-live-note-annotation live-note))
       (setq new-tags (read-string "Tags: " old-tags nil old-tags))
       (setq new-annotation (read-string "Annotation: " old-annotation nil old-annotation))
       (when (not (s-equals? old-tags new-tags))
         (setq changed t)
-        (setf (anotes-live-note-tags note) new-tags)
+        (setf (anotes-live-note-tags live-note) new-tags)
         )
       (when (not (s-equals? old-annotation new-annotation))
         (setq changed t)
-        (setf (anotes-live-note-annotation note) new-annotation)
+        (setf (anotes-live-note-annotation live-note) new-annotation)
         )
 
       (when changed
-        (anotes--save-or-update-note note label uri)
+        (anotes--save-or-update-note live-note label uri)
         (anotes--save-same-label label)
         (when redisplay
-          (anotes--redisplay-note note)
+          (anotes--redisplay-note live-note)
           )
         )
       )
@@ -456,7 +466,6 @@ in which, key is id, and value is `anote-live-note'.")
     (user-error "Enable anotes-local-mode first."))
   (let ((buffer-info anotes--buffer-info)
         label
-        note
         live-note
         id
         uri
@@ -470,7 +479,7 @@ in which, key is id, and value is `anote-live-note'.")
           )
       (setq label (anotes-buffer-info-label buffer-info))
       (setq uri (anotes-buffer-info-uri buffer-info))
-      (setq live-note (anotes--new-note-in-text-buffer))
+      (setq live-note (anotes--new-note-in-text-buffer type))
       (when live-note
         (setq id (anotes-live-note-id live-note))
         (ht-set anotes--buffer-notes id live-note)
@@ -508,23 +517,23 @@ in which, key is id, and value is `anote-live-note'.")
     )
   )
 
-(defun anotes--load-same-label ()
+(defun anotes--load-same-label (label)
   "Load notes of label current buffer belongs to."
-  (let ((label (anotes-buffer-info-label anotes--buffer-info))
-        (uri (anotes-buffer-info-uri anotes--buffer-info))
-        (anote-dir (anotes-buffer-info-anote-dir anotes--buffer-info))
-        anote-file
-        )
+  (let (label)
     (when (not (ht-contains? anotes--label-notes label))
-      (setq anote-file (anotes--anote-file-name label anote-dir))
-      (message "anotes--load-same-label anote-file %s" anote-file)
-      (when (f-exists-p anote-file)
-        (load-file anote-file))
+      (anotes--load-label-notes label)
       )
     )
   )
 
-(defun anotes--restore-file-notes ()
+(defun anotes--load-label-notes (label)
+  (let (anote-dir anote-file)
+    (setq anote-dir (anotes--note-file-directory-match-label label))
+    (setq anote-file (anotes--anote-file-name label anote-dir))
+    (when (f-exists-p anote-file)
+      (load-file anote-file))))
+
+(defun anotes--retrieve-file-notes ()
   (let (label-notes file-notes label uri id)
     (setq anotes--buffer-notes (ht-create))
     (setq label (anotes-buffer-info-label anotes--buffer-info))
@@ -534,26 +543,24 @@ in which, key is id, and value is `anote-live-note'.")
       (setq file-notes (ht-get label-notes uri))
       (when file-notes
         (dolist (note (ht-values file-notes))
-          (setq id (anotes-live-note-id note))
-          (ht-set anotes--buffer-notes id note))))))
+          (setq id (anotes-note-id note))
+          (ht-set anotes--buffer-notes id (anotes-to-live-note note)))))))
 
-(defun anotes--display-file-notes ()
+(defun anotes--redisplay-file-notes ()
   (anotes--remove-all-overlays)
   (dolist (live-note (ht-values anotes--buffer-notes))
     (anotes--redisplay-note live-note)))
 
-(defun anotes--write-to-file (anote-file live-notes uri &optional append)
+(defun anotes--write-to-file (anote-file notes uri &optional append)
   ""
   (let ((label (anotes-buffer-info-label anotes--buffer-info))
         (filedir (anotes-buffer-info-filedir anotes--buffer-info))
         (writer #'f-write-text)
-        relative-file
-        notes)
-    (when live-notes
+        relative-file)
+    (when notes
       (if (anotes--remote-webpage uri)
           (setq relative-file uri)
         (setq relative-file (f-relative uri filedir)))
-      (setq notes (mapcar #'anotes-from-live-note (ht-values live-notes)))
       (setq writer #'f-append-text)
       (funcall writer
                (format "\(anotes--recover-anotes '\(
@@ -583,10 +590,12 @@ in which, key is id, and value is `anote-live-note'.")
     (and (f-exists-p anote-file)
          (f-delete anote-file))
     (setq label-notes (ht-get anotes--label-notes label))
-    (dolist (uri (ht-keys label-notes))
-      (setq file-notes (ht-get label-notes uri))
-      (when (> (ht-size file-notes) 0)
-        (anotes--write-to-file anote-file file-notes uri t)
+    (when label-notes
+      (dolist (uri (ht-keys label-notes))
+        (setq file-notes (ht-get label-notes uri))
+        (when (> (ht-size file-notes) 0)
+          (anotes--write-to-file anote-file (ht-values file-notes) uri t)
+          )
         )
       )
     )
@@ -606,7 +615,7 @@ in which, key is id, and value is `anote-live-note'.")
   "The minor mode for taking notes."
   :keymap anotes-mode-map
   (let ((buffer-info (anotes--buffer-info))
-        type)
+        type label)
     (if anotes-local-mode
         (progn
           (setq type (anotes-buffer-info-type buffer-info))
@@ -615,6 +624,7 @@ in which, key is id, and value is `anote-live-note'.")
                 (anotes-local-mode -1)
                 (user-error "Not supported by anotes.")
                 )
+            (setq label (anotes-buffer-info-label buffer-info))
             (setq anotes--buffer-info buffer-info)
 
             (setq anotes--overlays (ht-create))
@@ -623,9 +633,9 @@ in which, key is id, and value is `anote-live-note'.")
             (setq right-margin-width anotes-right-margin-width)
             (set-window-margins (get-buffer-window (current-buffer)) 0 right-margin-width)
 
-            (anotes--load-same-label)
-            (anotes--restore-file-notes)
-            (anotes--display-file-notes)
+            (anotes--load-same-label label)
+            (anotes--retrieve-file-notes)
+            (anotes--redisplay-file-notes)
 
             (add-hook 'after-save-hook #'anotes--save-buffer-hook nil t)
             )
