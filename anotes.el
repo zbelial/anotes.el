@@ -63,6 +63,12 @@
   "Face for annotations."
   :group 'anotes)
 
+(defface anotes-mode-line
+  '((t (:inherit font-lock-constant-face :weight bold)))
+  "Face for anotes's mode line."
+  :group 'anotes)
+
+
 ;;; Custom
 (defcustom anotes-default-local-note-directory user-emacs-directory
   "The default directory used to store notes."
@@ -88,6 +94,7 @@ The notes added to files in the first directory will be saved to the second dire
 
 (defconst anotes-default-local-label "ANOTE_LOCAL")
 (defconst anotes-default-remote-webpage-label "ANOTE_REMOTE")
+(defconst anotes-ver1 1)
 
 ;;; Macros
 (defmacro anotes--with-message-suppression (&rest body)
@@ -280,7 +287,7 @@ currently displayed message, if any."
 
     (unless (and (string-empty-p context)
                  (string-empty-p annotation))
-      (setq live-note (make-anotes-live-note :id id :tags tags :context context :annotation annotation :pos-type ANOTES-CHAR-POS :start-pos start :end-pos end :label label :file-type type))
+      (setq live-note (make-anotes-live-note :ver anotes-ver1 :id id :tags tags :context context :annotation annotation :pos-type ANOTES-CHAR-POS :start-pos start :end-pos end :label label :file-type type))
       )
 
     live-note
@@ -324,13 +331,17 @@ in which, key is id, and value is `anotes-note'.")
     )
   )
 
-;; (defun anotes--delete-buffer-notes (&optional label uri)
-;;   (let ((label (or label (anotes-buffer-info-label anotes--buffer-info)))
-;;         (uri (or uri (anotes-buffer-info-uri anotes--buffer-info)))
-;;         label-notes)
-;;     (setq label-notes (ht-get anotes--label-notes label))
-;;     (when label-notes
-;;       (ht-remove label-notes uri))))
+(defun anotes--delete-buffer-notes (&optional label uri)
+  (let ((label (or label (anotes-buffer-info-label anotes--buffer-info)))
+        (uri (or uri (anotes-buffer-info-uri anotes--buffer-info)))
+        label-notes)
+    (setq label-notes (ht-get anotes--label-notes label))
+    (when label-notes
+      (ht-remove label-notes uri)
+      (ht-set anotes--label-notes label label-notes))
+    (setq anotes--buffer-notes (ht-create))
+    (anotes--save-same-label label)
+    (anotes--remove-all-overlays)))
 
 (defun anotes--delete-note (id &optional redisplay)
   (let (label-notes file-notes uri label ov)
@@ -444,6 +455,13 @@ in which, key is id, and value is `anotes-note'.")
     )
   )
 
+(defun anotes-delete-buffer-notes ()
+  (interactive)
+  (when (not anotes-local-mode)
+    (user-error "Enable anotes-local-mode first.")
+    )
+  (anotes--delete-buffer-notes))
+
 (defun anotes-delete-note-at-point ()
   "Delete existing live-note at point."
   (interactive)
@@ -502,13 +520,15 @@ in which, key is id, and value is `anotes-note'.")
   (let ((file (plist-get data :file))
         (label (plist-get data :label))
         (notes (plist-get data :notes))
-        live-note
+        note live-note
         live-notes
         uri
         )
     (setq anotes--buffer-notes (ht-create))
     (setq uri (f-expand file (anotes--directory-match-label label)))
-    (dolist (note notes)
+    (dolist (pl notes)
+      (message "pl %S" pl)
+      (setq note (anotes-deserialize pl))
       (setq live-note (anotes-to-live-note note))
       (anotes--save-or-update-note live-note label uri)
       )
@@ -547,13 +567,21 @@ in which, key is id, and value is `anotes-note'.")
   (dolist (live-note (ht-values anotes--buffer-notes))
     (anotes--redisplay-note live-note)))
 
+(defun anotes--note-sorter (note1 note2)
+  (let ((id1 (anotes-note-id note1))
+        (id2 (anotes-note-id note2)))
+    (< id1 id2)))
+
 (defun anotes--write-to-file (anote-file notes uri &optional append)
   ""
   (let ((label (anotes-buffer-info-label anotes--buffer-info))
         (filedir (anotes-buffer-info-filedir anotes--buffer-info))
         (writer #'f-write-text)
+        sorted-notes
         relative-file)
+    ;; 按id升序排序
     (when notes
+      (setq sorted-notes (cl-sort notes #'anotes--note-sorter))
       (if (anotes--remote-webpage uri)
           (setq relative-file uri)
         (setq relative-file (f-relative uri filedir)))
@@ -564,7 +592,7 @@ in which, key is id, and value is `anotes-note'.")
 :file \"%s\"
 :notes \(
 %s
-)))\n\n" label relative-file (mapconcat (lambda (s) (format "%S" s)) notes "\n"))
+)))\n\n" label relative-file (mapconcat (lambda (s) (format "%S" (anotes-serialize s))) sorted-notes "\n"))
                'utf-8-unix
                anote-file
                )))
@@ -576,20 +604,24 @@ in which, key is id, and value is `anotes-note'.")
         label-notes
         anote-dir
         anote-file
-        uri
+        uri uris
         file-notes
         )
     (setq anote-dir (anotes--note-file-directory-match-label label))
     (and (not (f-exists-p anote-dir))
          (f-mkdir anote-dir))
     (setq anote-file (anotes--anote-file-name label anote-dir))
+    ;; (message "anotes--save-same-label label %s, anote-file %s" label anote-file)
     (and (f-exists-p anote-file)
          (f-delete anote-file))
     (setq label-notes (ht-get anotes--label-notes label))
     (when label-notes
-      (dolist (uri (ht-keys label-notes))
+      ;; 按文件名排序
+      (dolist (uri (cl-sort (ht-keys label-notes) #'string<))
+        ;; (message "anotes--save-same-label label %s, uri %s" label uri)
         (setq file-notes (ht-get label-notes uri))
         (when (> (ht-size file-notes) 0)
+          ;; (message "anotes--save-same-label uri %s, notes %S" uri (ht-values file-notes))
           (anotes--write-to-file anote-file (ht-values file-notes) uri t)
           )
         )
@@ -599,7 +631,12 @@ in which, key is id, and value is `anotes-note'.")
 
 (defun anotes--save-buffer-hook ()
   (when anotes-local-mode
-    (anotes--save-same-label)
+    (let ((label (anotes-buffer-info-label anotes--buffer-info))
+          (uri (anotes-buffer-info-uri anotes--buffer-info)))
+      (dolist (live-note (ht-values anotes--buffer-notes))
+        (anotes--save-or-update-note live-note label uri))
+      (anotes--save-same-label)
+      )
     )
   )
 
@@ -648,6 +685,23 @@ in which, key is id, and value is `anotes-note'.")
     )
   )
 
+;; modeline
+(defun anotes--mode-line-format ()
+  (let ((count 0)
+        label)
+    (when anotes--buffer-info
+      (setq label (anotes-buffer-info-label anotes--buffer-info))
+      (setq count (ht-size anotes--buffer-notes))
+      (propertize (format "%s:%d" label count) 'face 'anotes-mode-line)
+      )
+    )
+  )
+(defvar anotes--mode-line-format `(:eval (anotes--mode-line-format)))
+
+(put 'anotes--mode-line-format 'risky-local-variable t)
+
+(add-to-list 'mode-line-misc-info
+             `(anotes-local-mode (" [" anotes--mode-line-format "] ")))
 
 
 (provide 'anotes)

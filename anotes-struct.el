@@ -45,8 +45,13 @@
 (cl-defgeneric anotes-from-live-note (live-note)
   )
 
+(cl-defgeneric anotes-serialize (note)
+  )
+
+;; TODO extra-note-file
 (cl-defstruct anotes-note
   "Represent a note."
+  (ver)
   (id)
   (tags) ;; tag seperated with comma
   (context) ;; text selected 
@@ -61,6 +66,7 @@
 
 (cl-defstruct anotes-live-note
   "Represent a live note that uses markers(if possible) as position."
+  (ver)
   (id)
   (tags) ;; tag seperated with comma
   (context) ;; text selected 
@@ -74,7 +80,8 @@
   )
 
 (cl-defmethod anotes-from-live-note ((live-note anotes-live-note))
-  (let ((pos-type (anotes-live-note-pos-type live-note))
+  (let ((ver (anotes-live-note-ver live-note))
+        (pos-type (anotes-live-note-pos-type live-note))
         (tags (anotes-live-note-tags live-note))
         (context (anotes-live-note-context live-note))
         (annotation (anotes-live-note-annotation live-note))
@@ -93,14 +100,15 @@
           )
       (setq start-pos start)
       (setq end-pos end))
-    (setq note (make-anotes-note :id id :tags tags :context context :annotation annotation :pos-type pos-type :start-pos start-pos :end-pos end-pos :label label :extra-note-file extra-note-file :file-type file-type))
+    (setq note (make-anotes-note :ver ver :id id :tags tags :context context :annotation annotation :pos-type pos-type :start-pos start-pos :end-pos end-pos :label label :extra-note-file extra-note-file :file-type file-type))
 
     note
     )
   )
 
 (cl-defmethod anotes-to-live-note ((note anotes-note))
-  (let ((id (anotes-note-id note))
+  (let ((ver (anotes-note-ver note))
+        (id (anotes-note-id note))
         (tags (anotes-note-tags note))
         (context (anotes-note-context note))
         (annotation (anotes-note-annotation note))
@@ -117,9 +125,51 @@
           )
       (setq start-pos (anotes-note-start-pos note))
       (setq end-pos (anotes-note-end-pos note)))
-    (setq live-note (make-anotes-live-note :id id :tags tags :context context :annotation annotation :label label :extra-note-file extra-note-file :pos-type pos-type :start-pos start-pos :end-pos end-pos :file-type file-type))
+    (setq live-note (make-anotes-live-note :ver ver :id id :tags tags :context context :annotation annotation :label label :extra-note-file extra-note-file :pos-type pos-type :start-pos start-pos :end-pos end-pos :file-type file-type))
 
     live-note
+    )
+  )
+
+(cl-defmethod anotes-serialize ((note anotes-note))
+  (let (pl
+        ver id tags context annotation label extra-note-file pos-type start-pos end-pos file-type)
+    (setq ver (anotes-note-ver note))
+    (setq id (anotes-note-id note))
+    (setq tags (anotes-note-tags note))
+    (setq context (anotes-note-context note))
+    (setq annotation (anotes-note-annotation note))
+    (setq label (anotes-note-label note))
+    (setq extra-note-file (anotes-note-extra-note-file note))
+    (setq pos-type (anotes-note-pos-type note))
+    (setq start-pos (anotes-note-start-pos note))
+    (setq end-pos (anotes-note-end-pos note))
+    (setq file-type (anotes-note-file-type note))
+
+    (setq pl (list :ver ver :id id :tags tags :context context :annotation annotation :label label :extra-note-file extra-note-file :pos-type pos-type :start-pos start-pos :end-pos end-pos :file-type file-type))
+
+    pl
+    )
+  )
+
+(defun anotes-deserialize (pl)
+  (let (note
+        ver id tags context annotation label extra-note-file pos-type start-pos end-pos file-type)
+    (setq ver (plist-get pl :ver))
+    (setq id (plist-get pl :id))
+    (setq tags (plist-get pl :tags))
+    (setq context (plist-get pl :context))
+    (setq annotation (plist-get pl :annotation))
+    (setq label (plist-get pl :label))
+    (setq extra-note-file (plist-get pl :extra-note-file))
+    (setq pos-type (plist-get pl :pos-type))
+    (setq start-pos (plist-get pl :start-pos))
+    (setq end-pos (plist-get pl :end-pos))
+    (setq file-type (plist-get pl :file-type))
+
+    (setq note (make-anotes-note :ver ver :id id :tags tags :context context :annotation annotation :label label :extra-note-file extra-note-file :pos-type pos-type :start-pos start-pos :end-pos end-pos :file-type file-type))
+
+    note
     )
   )
 

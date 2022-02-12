@@ -94,6 +94,7 @@
         pos)
     (setq pos (plist-get meta :start-pos))
     (goto-char pos)
+    (recenter)
     )
   )
 
