@@ -46,9 +46,10 @@
 
 
 (defun ivy-anotes--format-note (note uri &optional with-file)
-  (let (str
+  (let (str 
         meta
         id context annotation start-pos end-pos tags pos-type file-type
+        ac
         )
     (setq id (anotes-note-id note))
     (setq context (anotes-note-context note))
@@ -59,9 +60,12 @@
     (setq file-type (anotes-note-file-type note))
     (setq tags (anotes-note-tags note))
 
+    (setq ac annotation)
+    (when (string-empty-p ac)
+      (setq ac context))
     (if (not with-file)
-        (setq str (format "%-30s        %-60s" (s-truncate 30 tags) (s-truncate 60 annotation)))
-      (setq str (format "%-30s        %-60s        %s" (s-truncate 30 tags) (s-truncate 60 annotation) (f-short uri)))
+        (setq str (format "%-30s        %-90s" (s-truncate 30 tags) (s-truncate 90 ac)))
+      (setq str (format "%-30s        %-60s        %s" (s-truncate 30 tags) (s-truncate 60 ac) (f-short uri)))
       )
     (setq meta (list :id id :context context :annotation annotation :start-pos start-pos :end-pos end-pos :tags tags :uri uri :pos-type pos-type :file-type file-type))
 
