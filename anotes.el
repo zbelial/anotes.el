@@ -455,6 +455,7 @@ in which, key is id, and value is `anotes-note'.")
     )
   )
 
+;;;###autoload
 (defun anotes-delete-buffer-notes ()
   (interactive)
   (when (not anotes-local-mode)
@@ -462,6 +463,7 @@ in which, key is id, and value is `anotes-note'.")
     )
   (anotes--delete-buffer-notes))
 
+;;;###autoload
 (defun anotes-delete-note-at-point ()
   "Delete existing live-note at point."
   (interactive)
@@ -477,6 +479,7 @@ in which, key is id, and value is `anotes-note'.")
     )
   )
 
+;;;###autoload
 (defun anotes-add-note ()
   "Add a new piece of note, save it to a note file, and display it in current buffer if possible."
   (interactive)
@@ -514,6 +517,13 @@ in which, key is id, and value is `anotes-note'.")
      )
     )
   )
+
+;;;###autoload
+(defun anotes-save-same-label ()
+  (interactive)
+  (when (not anotes-local-mode)
+    (user-error "Enable anotes-local-mode first."))
+  (anotes--save-same-label))
 
 (defun anotes--recover-anotes (data)
   "Load notes of a single file."
