@@ -688,11 +688,17 @@ in which, key is id, and value is `anotes-note'.")
 ;; modeline
 (defun anotes--mode-line-format ()
   (let ((count 0)
+        (label-count 0)
+        label-notes
         label)
     (when anotes--buffer-info
       (setq label (anotes-buffer-info-label anotes--buffer-info))
       (setq count (ht-size anotes--buffer-notes))
-      (propertize (format "%s:%d" label count) 'face 'anotes-mode-line)
+      (setq label-notes (ht-get anotes--label-notes label))
+      (when label-notes
+        (setq label-count (apply #'+ (ht-map (lambda (k v) (ht-size v)) (ht-get anotes--label-notes label))))
+        )
+      (propertize (format "%s:%d:%d" label count label-count) 'face 'anotes-mode-line)
       )
     )
   )
