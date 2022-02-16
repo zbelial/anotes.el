@@ -146,10 +146,15 @@
     )
   (interactive)
   (setq ivy-anotes--opoint (point))
-  (let (candidates res)
+  (let (candidates res
+                   (preselect 0))
     (setq candidates (ivy-anotes--buffer-candidates))
+    (dolist (cand candidates)
+      (when (< (plist-get (cdr cand) :start-pos) ivy-anotes--opoint)
+        (setq preselect (1+ preselect))))
     (unwind-protect
         (setq res (ivy-read "Notes: " candidates
+                            :preselect preselect
                             :action '(1
                                       ("j" ivy-anotes--buffer-jump "Jump to note position.")
                                       ("p" ivy-anotes--buffer-preview "Preview note context.")
