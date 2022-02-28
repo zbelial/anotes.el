@@ -63,9 +63,9 @@
     (setq ac annotation)
     (when (string-empty-p ac)
       (setq ac context))
-    (if (not with-file)
-        (setq str (format "%-30s        %-90s" (s-truncate 30 tags) (s-truncate 90 ac)))
-      (setq str (format "%-30s        %-60s        %s" (s-truncate 30 tags) (s-truncate 60 ac) (f-short uri)))
+    (if with-file
+        (setq str (format "%-30s        %-90s        %s" (s-truncate 30 tags) (s-truncate 90 ac) (f-short uri)))
+      (setq str (format "%-30s        %-90s" (s-truncate 30 tags) (s-truncate 90 ac)))
       )
     (setq meta (list :id id :context context :annotation annotation :start-pos start-pos :end-pos end-pos :tags tags :uri uri :pos-type pos-type :file-type file-type))
 
