@@ -238,7 +238,7 @@
               (switch-to-buffer buffer)
               (goto-char pos)
               (recenter))
-          (eww (s-concat "file://" file) 4)
+          (eww (s-concat "file://" uri) 4)
           (goto-char pos)
           (recenter)))      
       )
