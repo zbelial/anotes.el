@@ -44,42 +44,51 @@
   :group 'anotes
   :type 'boolean)
 
+(defcustom ivy-anotes-truncate-filedir t
+  "If true, truncate directory when showing the anotes of a label."
+  :group 'anotes
+  :type 'boolean)
 
-(defun ivy-anotes--format-note (note uri &optional with-file)
+(defun ivy-anotes--format-note (note uri &optional with-file truncate-dir anotes-dir)
   (let (str 
         meta
         id context annotation start-pos end-pos tags pos-type file-type
-        ac
-        )
+        ac)
     (setq id (anotes-note-id note))
-    (setq context (anotes-note-context note))
-    (setq annotation (anotes-note-annotation note))
+    (setq context (propertize (string-replace "\n" "" (or (anotes-note-context note) "")) 'face '('shadow)))
+    (setq annotation (or (anotes-note-annotation note) ""))
     (setq start-pos (anotes-note-start-pos note))
     (setq end-pos (anotes-note-end-pos note))
     (setq pos-type (anotes-note-pos-type note))
     (setq file-type (anotes-note-file-type note))
     (setq tags (anotes-note-tags note))
 
-    (setq ac annotation)
-    (when (string-empty-p ac)
+    (cond
+     ((and (not (string-empty-p context))
+           (not (string-empty-p annotation)))
+      (setq ac (concat annotation " | " context)))
+     ((not (string-empty-p context))
       (setq ac context))
+     ((not (string-empty-p annotation))
+      (setq ac annotation))
+     (t
+      (setq ac "")))
     (if with-file
-        (setq str (format "%-30s        %-90s        %s" (s-truncate 30 tags) (s-truncate 90 ac) (f-short uri)))
-      (setq str (format "%-30s        %-90s" (s-truncate 30 tags) (s-truncate 90 ac)))
-      )
+        (if (and truncate-dir
+                 anotes-dir
+                 (not (string-empty-p anotes-dir)))
+            (setq str (format "%-30s        %-90s        %s" (s-truncate 30 tags) (s-truncate 90 ac) (f-short (file-relative-name uri anotes-dir))))
+          (setq str (format "%-30s        %-90s        %s" (s-truncate 30 tags) (s-truncate 90 ac) (f-short uri))))
+      (setq str (format "%-30s        %-90s" (s-truncate 30 tags) (s-truncate 90 ac))))
     (setq meta (list :id id :context context :annotation annotation :start-pos start-pos :end-pos end-pos :tags tags :uri uri :pos-type pos-type :file-type file-type))
 
-    (cons str meta)
-    )
-  )
+    (cons str meta)))
 
-;; sort in back-to-front order according to start.
 (defun ivy-anotes--buffer-note-sorter (note1 note2)
+  "sort in back-to-front order according to start."
   (let ((start1 (anotes-live-note-start-pos note1))
         (start2 (anotes-live-note-start-pos note2)))
-    (> start1 start2)
-    )
-  )
+    (> start1 start2)))
 
 (defun ivy-anotes--buffer-candidates ()
   (let ((notes (ht-values anotes--buffer-notes))
@@ -87,26 +96,20 @@
         cand candidates uri)
     (setq notes (cl-sort notes #'ivy-anotes--buffer-note-sorter))
     (dolist (note notes)
-      (cl-pushnew (ivy-anotes--format-note (anotes-from-live-note note) uri) candidates)
-      )
-    candidates
-    )
-  )
+      (cl-pushnew (ivy-anotes--format-note (anotes-from-live-note note) uri) candidates))
+    candidates))
 
 (defun ivy-anotes--buffer-jump (cand)
   (let ((meta (cdr cand))
         pos)
     (setq pos (plist-get meta :start-pos))
     (goto-char pos)
-    (recenter)
-    )
-  )
+    (recenter)))
 
 (defun ivy-anotes--buffer-preview ()
   (let ((current (ivy-state-current ivy-last))
 	item meta
-	marker
-	)
+	marker)
     (with-ivy-window
       (when (not (string-empty-p current))
         (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
@@ -115,35 +118,25 @@
         (goto-char marker)
         (recenter)
         (let ((pulse-delay 0.05))
-	  (pulse-momentary-highlight-one-line (point))
-	  )
-        )))  
-  )
+	  (pulse-momentary-highlight-one-line (point)))))))
 
 (defun ivy-anotes--buffer-note-edit (cand)
   (let ((meta (cdr cand))
-        id
-        )
+        id)
     (setq id (plist-get meta :id))
-    (anotes--edit-note id t)
-    )
-  )
+    (anotes--edit-note id t)))
 
 (defun ivy-anotes--buffer-note-delete (cand)
   (let ((meta (cdr cand))
-        id
-        )
+        id)
     (setq id (plist-get meta :id))
-    (anotes--delete-note id t)
-    )
-  )
+    (anotes--delete-note id t)))
 
 
 (defvar ivy-anotes--opoint nil)
 (defun ivy-anotes ()
   (when (not anotes-local-mode)
-    (user-error "Enable anotes-local-mode first.")
-    )
+    (user-error "Enable anotes-local-mode first."))
   (interactive)
   (setq ivy-anotes--opoint (point))
   (let (candidates res
@@ -166,14 +159,12 @@
                             ))
       (unless res
         (goto-char ivy-anotes--opoint)
-        (setq ivy-anotes--opoint nil))
-      )
-    )
-  )
+        (setq ivy-anotes--opoint nil)))))
 
 (defun ivy-anotes--label-candidates ()
   (let (label
         (buffer-info anotes--buffer-info)
+        file-dir
         pos-type
         label-notes file-notes
         candidates)
@@ -183,9 +174,9 @@
       (setq pos-type (anotes-buffer-info-type buffer-info))
       (when (eq pos-type 'unsupported)
         (user-error "Not supported."))
-      (setq label (anotes-buffer-info-label buffer-info))
-      )
-    (message "ivy-anotes-label label %s" label)
+      (setq label (anotes-buffer-info-label buffer-info)))
+    ;; (message "ivy-anotes-label label %s" label)
+    (setq file-dir (anotes-buffer-info-filedir buffer-info))
     (setq label-notes (ht-get anotes--label-notes label))
     (when (not label-notes)
       (anotes--load-label-notes label)
@@ -194,13 +185,8 @@
       (dolist (uri (ht-keys label-notes))
         (setq file-notes (ht-get label-notes uri))
         (dolist (note (ht-values file-notes))
-          (cl-pushnew (ivy-anotes--format-note note uri t) candidates)
-          )
-        )
-      )
-    candidates
-    )
-  )
+          (cl-pushnew (ivy-anotes--format-note note uri t ivy-anotes-truncate-filedir file-dir) candidates))))
+    candidates))
 
 (defun ivy-anotes--existing-eww-buffer (uri)
   (let ((buffers (buffer-list))
@@ -210,8 +196,7 @@
         (when (and
                (eq major-mode 'eww-mode)
                (or (equal uri (anotes--buffer-file-name))
-                   (equal uri (eww-current-url))
-                   ))
+                   (equal uri (eww-current-url))))
           (setq target buffer))))
     target))
 
@@ -228,11 +213,9 @@
      ((eq file-type 'text)
       (find-file uri)
       (goto-char pos)
-      (recenter)
-      )
+      (recenter))
      ((eq file-type 'local-webpage)
-      (let ((buffer (ivy-anotes--existing-eww-buffer uri))
-            )
+      (let ((buffer (ivy-anotes--existing-eww-buffer uri)))
         (if buffer
             (progn
               (switch-to-buffer buffer)
@@ -240,11 +223,9 @@
               (recenter))
           (eww (s-concat "file://" uri) 4)
           (goto-char pos)
-          (recenter)))      
-      )
+          (recenter))))
      ((eq file-type 'remote-webpage)
-      (let ((buffer (ivy-anotes--existing-eww-buffer uri))
-            )
+      (let ((buffer (ivy-anotes--existing-eww-buffer uri)))
         (if buffer
             (progn
               (switch-to-buffer buffer)
@@ -252,18 +233,13 @@
               (recenter))
           (eww-browse-url uri t)
           (goto-char pos)
-          (recenter)))
-      )
+          (recenter))))
      (t
-      (user-error "Internal error - unknown type.")
-      )
-     )
+      (user-error "Internal error - unknown type.")))
     (when (and
            ivy-anotes-auto-enable-anotes
            (not anotes-local-mode))
-      (anotes-local-mode t))
-    )
-  )
+      (anotes-local-mode t))))
 
 (defun ivy-anotes-label ()
   (interactive)
@@ -271,11 +247,7 @@
     (setq candidates (ivy-anotes--label-candidates))
     (ivy-read "Notes: " candidates
               :action '(1
-                        ("j" ivy-anotes--label-jump "Jump to note position.")
-                        )
-              :caller #'ivy-anotes-label
-              )    
-    )
-  )
+                        ("j" ivy-anotes--label-jump "Jump to note position."))
+              :caller #'ivy-anotes-label)))
 
 (provide 'ivy-anotes)
