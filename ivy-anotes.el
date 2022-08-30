@@ -160,6 +160,7 @@
       (unless res
         (goto-char ivy-anotes--opoint)
         (setq ivy-anotes--opoint nil)))))
+(defalias 'counsel-anotes 'ivy-anotes)
 
 (defun ivy-anotes--label-candidates ()
   (let (label
@@ -249,5 +250,6 @@
               :action '(1
                         ("j" ivy-anotes--label-jump "Jump to note position."))
               :caller #'ivy-anotes-label)))
+(defalias 'counsel-anotes-label 'ivy-anotes-label)
 
 (provide 'ivy-anotes)
