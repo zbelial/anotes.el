@@ -49,6 +49,37 @@
   :group 'anotes
   :type 'boolean)
 
+(defun ivy-anotes-string-truncate (len s &optional ellipsis)
+  (let ((idx 0)
+        (idx-width 0)
+        (width (string-width s))
+        (width-diff 0)
+        (fills "")
+        (start 0)
+        (end (length s))
+        (loop t)
+        (ellipsis (or ellipsis ?\s)))
+    (if (<= width len)
+        (setq idx (length s))
+      (setq idx (/ (+ start end) 2))
+      (while loop
+        (setq idx-width (string-width s 0 idx))
+        (cond
+         ((= idx-width len)
+          (setq loop nil))
+         ((> idx-width len)
+          (setq end idx)
+          (setq idx (/ (+ start end) 2)))
+         ((< idx-width len)
+          (if (>= (string-width s 0 (1+ idx)) len)
+              (setq loop nil)
+            (setq start idx)
+            (setq idx (/ (+ start end) 2))))))
+      (setq width (string-width s 0 idx))
+      (setq width-diff (- len width))
+      (setq fills (make-string width-diff ellipsis)))
+    (format "%s%s" (substring s 0 idx) fills)))
+
 (defun ivy-anotes--format-note (note uri &optional with-file truncate-dir anotes-dir)
   (let (str 
         meta
@@ -77,9 +108,9 @@
         (if (and truncate-dir
                  anotes-dir
                  (not (string-empty-p anotes-dir)))
-            (setq str (format "%-30s        %-90s        %s" (s-truncate 30 tags) (s-truncate 90 ac) (f-short (file-relative-name uri anotes-dir))))
-          (setq str (format "%-30s        %-90s        %s" (s-truncate 30 tags) (s-truncate 90 ac) (f-short uri))))
-      (setq str (format "%-30s        %-90s" (s-truncate 30 tags) (s-truncate 90 ac))))
+            (setq str (format "%-30s        %-90s        %s" (ivy-anotes-string-truncate 30 tags) (ivy-anotes-string-truncate 90 ac) (f-short (file-relative-name uri anotes-dir))))
+          (setq str (format "%-30s        %-90s        %s" (ivy-anotes-string-truncate 30 tags) (ivy-anotes-string-truncate 90 ac) (f-short uri))))
+      (setq str (format "%-30s        %-90s" (ivy-anotes-string-truncate 30 tags) (ivy-anotes-string-truncate 90 ac))))
     (setq meta (list :id id :context context :annotation annotation :start-pos start-pos :end-pos end-pos :tags tags :uri uri :pos-type pos-type :file-type file-type))
 
     (cons str meta)))
