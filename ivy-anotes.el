@@ -51,36 +51,6 @@
   :group 'anotes
   :type 'boolean)
 
-(defun ivy-anotes-string-truncate-width (width s &optional ellipsis)
-  (let ((idx 0)
-        (idx-width 0)
-        (fills "")
-        (start 0)
-        (end (length s))
-        (loop t)
-        (ellipsis (or ellipsis ?.)))
-    (when (< width 0)
-      (error "args out of range"))
-    (if (<= (string-width s) width)
-        (setq idx (length s))
-      (setq idx (/ (+ start end) 2))
-      (while loop
-        (setq idx-width (string-width s 0 idx))
-        (message "start %d, end %d, idx %d, idx-width %d, width %d" start end idx idx-width width)
-        (cond
-         ((= idx-width width)
-          (setq loop nil))
-         ((> idx-width width)
-          (setq end idx)
-          (setq idx (/ (+ start end) 2)))
-         ((< idx-width width)
-          (if (> (string-width s 0 (1+ idx)) width)
-              (setq loop nil)
-            (setq start idx)
-            (setq idx (/ (+ start end) 2))))))
-      (setq fills (make-string (- width (string-width s 0 idx)) ellipsis)))
-    (format "%s%s" (substring s 0 idx) fills)))
-
 (defun ivy-anotes--format-note (note uri &optional with-file truncate-dir anotes-dir)
   (let (str 
         meta
@@ -109,9 +79,9 @@
         (if (and truncate-dir
                  anotes-dir
                  (not (string-empty-p anotes-dir)))
-            (setq str (format "%-30s        %-90s        %s" (ivy-anotes-string-truncate-width 30 tags) (ivy-anotes-string-truncate-width 90 ac) (f-short (file-relative-name uri anotes-dir))))
-          (setq str (format "%-30s        %-90s        %s" (ivy-anotes-string-truncate-width 30 tags) (ivy-anotes-string-truncate-width 90 ac) (f-short uri))))
-      (setq str (format "%-30s        %-90s" (ivy-anotes-string-truncate-width 30 tags) (ivy-anotes-string-truncate-width 90 ac))))
+            (setq str (format "%-30s        %-90s        %s" (truncate-string-to-width tags 30 0 ?\s "...") (truncate-string-to-width ac 90 0 ?\s "...") (f-short (file-relative-name uri anotes-dir))))
+          (setq str (format "%-30s        %-90s        %s" (truncate-string-to-width tags 30 0 ?\s "...") (truncate-string-to-width ac 90 0 ?\s "...") (f-short uri))))
+      (setq str (format "%-30s        %-90s" (truncate-string-to-width tags 30 0 ?\s "...") (truncate-string-to-width ac 90 0 ?\s "..."))))
     (setq meta (list :id id :context context :annotation annotation :start-pos start-pos :end-pos end-pos :tags tags :uri uri :pos-type pos-type :file-type file-type))
 
     (cons str meta)))
