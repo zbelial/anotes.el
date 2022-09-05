@@ -58,7 +58,7 @@
         (start 0)
         (end (length s))
         (loop t)
-        (ellipsis (or ellipsis ?\s)))
+        (ellipsis (or ellipsis ?.)))
     (when (< width 0)
       (error "args out of range"))
     (if (<= (string-width s) width)
@@ -66,6 +66,7 @@
       (setq idx (/ (+ start end) 2))
       (while loop
         (setq idx-width (string-width s 0 idx))
+        (message "start %d, end %d, idx %d, idx-width %d, width %d" start end idx idx-width width)
         (cond
          ((= idx-width width)
           (setq loop nil))
@@ -73,7 +74,7 @@
           (setq end idx)
           (setq idx (/ (+ start end) 2)))
          ((< idx-width width)
-          (if (>= (string-width s 0 (1+ idx)) width)
+          (if (> (string-width s 0 (1+ idx)) width)
               (setq loop nil)
             (setq start idx)
             (setq idx (/ (+ start end) 2))))))
