@@ -38,6 +38,8 @@
 (require 'anotes)
 (require 'ivy)
 (require 'ht)
+(require 's)
+(require 'f)
 
 (defcustom ivy-anotes-auto-enable-anotes t
   "Whether enable `anote-local-mode' of a buffer or not when jump to a note of that buffer."
@@ -49,37 +51,33 @@
   :group 'anotes
   :type 'boolean)
 
-(defun ivy-anotes-string-truncate (len s &optional ellipsis)
+(defun ivy-anotes-string-truncate-width (width s &optional ellipsis)
   (let ((idx 0)
         (idx-width 0)
-        (width (string-width s))
-        (width-diff 0)
         (fills "")
         (start 0)
         (end (length s))
-        (loop (when (> len )))
+        (loop t)
         (ellipsis (or ellipsis ?\s)))
-    (when (< len 0)
+    (when (< width 0)
       (error "args out of range"))
-    (if (<= width len)
+    (if (<= (string-width s) width)
         (setq idx (length s))
       (setq idx (/ (+ start end) 2))
       (while loop
         (setq idx-width (string-width s 0 idx))
         (cond
-         ((= idx-width len)
+         ((= idx-width width)
           (setq loop nil))
-         ((> idx-width len)
+         ((> idx-width width)
           (setq end idx)
           (setq idx (/ (+ start end) 2)))
-         ((< idx-width len)
-          (if (>= (string-width s 0 (1+ idx)) len)
+         ((< idx-width width)
+          (if (>= (string-width s 0 (1+ idx)) width)
               (setq loop nil)
             (setq start idx)
             (setq idx (/ (+ start end) 2))))))
-      (setq width (string-width s 0 idx))
-      (setq width-diff (- len width))
-      (setq fills (make-string width-diff ellipsis)))
+      (setq fills (make-string (- width (string-width s 0 idx)) ellipsis)))
     (format "%s%s" (substring s 0 idx) fills)))
 
 (defun ivy-anotes--format-note (note uri &optional with-file truncate-dir anotes-dir)
@@ -110,9 +108,9 @@
         (if (and truncate-dir
                  anotes-dir
                  (not (string-empty-p anotes-dir)))
-            (setq str (format "%-30s        %-90s        %s" (ivy-anotes-string-truncate 30 tags) (ivy-anotes-string-truncate 90 ac) (f-short (file-relative-name uri anotes-dir))))
-          (setq str (format "%-30s        %-90s        %s" (ivy-anotes-string-truncate 30 tags) (ivy-anotes-string-truncate 90 ac) (f-short uri))))
-      (setq str (format "%-30s        %-90s" (ivy-anotes-string-truncate 30 tags) (ivy-anotes-string-truncate 90 ac))))
+            (setq str (format "%-30s        %-90s        %s" (ivy-anotes-string-truncate-width 30 tags) (ivy-anotes-string-truncate-width 90 ac) (f-short (file-relative-name uri anotes-dir))))
+          (setq str (format "%-30s        %-90s        %s" (ivy-anotes-string-truncate-width 30 tags) (ivy-anotes-string-truncate-width 90 ac) (f-short uri))))
+      (setq str (format "%-30s        %-90s" (ivy-anotes-string-truncate-width 30 tags) (ivy-anotes-string-truncate-width 90 ac))))
     (setq meta (list :id id :context context :annotation annotation :start-pos start-pos :end-pos end-pos :tags tags :uri uri :pos-type pos-type :file-type file-type))
 
     (cons str meta)))
