@@ -79,9 +79,9 @@
         (if (and truncate-dir
                  anotes-dir
                  (not (string-empty-p anotes-dir)))
-            (setq str (format "%-30s        %-90s        %s" (truncate-string-to-width tags 30 0 ?\s "...") (truncate-string-to-width ac 90 0 ?\s "...") (f-short (file-relative-name uri anotes-dir))))
-          (setq str (format "%-30s        %-90s        %s" (truncate-string-to-width tags 30 0 ?\s "...") (truncate-string-to-width ac 90 0 ?\s "...") (f-short uri))))
-      (setq str (format "%-30s        %-90s" (truncate-string-to-width tags 30 0 ?\s "...") (truncate-string-to-width ac 90 0 ?\s "..."))))
+            (setq str (format "%-90s        %-30s        %s" (truncate-string-to-width ac 90 0 ?\s "...") (truncate-string-to-width tags 30 0 ?\s "...") (f-short (file-relative-name uri anotes-dir))))
+          (setq str (format "%-90s        %-30s        %s"  (truncate-string-to-width ac 90 0 ?\s "...") (truncate-string-to-width tags 30 0 ?\s "...") (f-short uri))))
+      (setq str (format "%-90s        %-30s"  (truncate-string-to-width ac 90 0 ?\s "...") (truncate-string-to-width tags 30 0 ?\s "..."))))
     (setq meta (list :id id :context context :annotation annotation :start-pos start-pos :end-pos end-pos :tags tags :uri uri :pos-type pos-type :file-type file-type))
 
     (cons str meta)))
